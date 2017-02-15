@@ -1,30 +1,36 @@
 % btom - takes output from cellPACK and turns it into a synthetic tomogram .mrc file
 
-tic; clear %bbchange
+tic; clear
 
-name = 'output'; % INPUT - locations and rotations of all particles. CHANGE as needed
+name = 'RECIPE-Alber_model - Sheet1d-CRvariable_tr4.json'; % INPUT - cellPACK result _tr .json file
 
 [~, work_dir, ~] = fileparts(pwd);
 if ~strcmp(work_dir,'tomosimu_sandbox')
     cd ..
 end
-cd code; work_dir=pwd;
+cd code; 
+work_dir=pwd;
 
-cellPACK=importdata(strcat(name,'.txt'));
-
-protein_names=unique(cellPACK.textdata);
+recipe = loadjson(name);
+compartments = fieldnames(recipe);
+%ingredients=fieldnames(recipe.(compartments{2})); %NEED TO EXPAND for multiple compartments
+%protein_names=unique(cellPACK.textdata);
 %protein_numbers=cellPACK.data(:,13);
-locations=cellPACK.data(:,1:3);
+%locations=cellPACK.data(:,1:3);
 
-rotations=cell(numel(cellPACK.data(:,1)),1);
-for i=1:numel(cellPACK.data(:,1))
-    rotations{i}=[[cellPACK.data(i,4), cellPACK.data(i,5), cellPACK.data(i,6)]; [cellPACK.data(i,7), cellPACK.data(i,8), cellPACK.data(i,9)]; [cellPACK.data(i,10), cellPACK.data(i,11), cellPACK.data(i,12)]];
-end
-
-bounding_box=[ceil(max(locations(:,1)))+20 ceil(max(locations(:,2)))+20 ceil(max(locations(:,3)))+20];
-%bounding_box=[100 100 100]; %CHANGE to input bounding box from file!!!!
+%bounding_box=[ceil(max(locations(:,1)))+20 ceil(max(locations(:,2)))+20 ceil(max(locations(:,3)))+20];
+bounding_box=[200 200 200]; %CHANGE to input bounding box from file!!!!
 
 tomogram_size = bounding_box; % in pixels? nm? I think this is just the number of boxes in the tomogram.
+
+ingredients=fieldnames(recipe.cytoplasme.ingredients);
+pdbs=cell(numel(ingredients),1);
+
+for i=1:size(ingredients)
+    pdbs{i}=recipe.cytoplasme.ingredients.(ingredients{i}).source.pdb;
+end
+
+protein_names=unique(pdbs);
 
 disp('Initialization Start');
 ws = struct();
@@ -46,25 +52,25 @@ ws.reconstruction_param.model.missing_wedge_angle = 30;
 ws.reconstruction_param.model.ctf = GenerateSimulationMap.get_ctf_param(ws.map.map_resolution);
 ws.reconstruction_param.model.ctf.voltage=300;
 
-% set the contour level for each macromolecular complex
-contour_threshold = 0.2;
-for i=1:numel(vols_large)
-        density_threshold(i)=max(vols_large{i}(:))*contour_threshold;
-        standard_sphere(i)=amprs_wthr(vols_large{i},density_threshold(i),max_siz(1)); %GET RID OF!!! USE CENTROIDS FROM CELLPACK? THIS IS WHERE THE VARIABILITY COMES FROM. IN amprs_whtr IS FAULTY minboundsphere. Actually, may be OK - only problem was when using radii to identify proteins. using for rotation centers may still be ok. But there might be a more efficient way to do it.
-        %complex_volume(i)=sum(vols_large{i}(:)>density_threshold(i)); %USELESS?
-end
-
 % add each particle to its corresponding location to generate simulated tomogram
+rotation_center = ws.map.map_resolution/2 * [1 1 1]; %MUST CHANGE - rotates around center of .situs map. cellPACK rotates around center of mass (sort of - actually average positions of atoms, not weighted). They must be made to agree. Calculate center of mass here?
 tic
 vol_den=zeros(tomogram_size);
-disp('adding particle            ')
-for i=1:size(locations,1)
-    protein_number=find(strcmp(cellPACK.textdata(i),protein_names));
-    fprintf(1,'\b\b\b\b\b\b\b\b\b\b%10.0f',i);
-    rotation_center = standard_sphere(protein_number).c;
-    shifting_to_location = locations(i,1:3);
-    vol_t_mut=VolumeUtil.rotate_vol_pad0(vols_large{protein_number}, rotations{i}, rotation_center,shifting_to_location,tomogram_size,'cubic');
-    vol_den=vol_den+vol_t_mut;
+%disp('adding particle            ')
+for i=1:size(recipe.cytoplasme.ingredients)
+    ingredients=fieldnames(recipe.cytoplasme.ingredients);
+    for j=1:numel(ingredients)
+        pdb=recipe.cytoplasme.ingredients.(ingredients{j}).source.pdb;
+        particles = recipe.cytoplasme.ingredients.(ingredients{j}).results;
+        for k=1:numel(particles)
+            protein_number=find(strcmp(pdb,protein_names));
+            %fprintf(1,'\b\b\b\b\b\b\b\b\b\b%10.0f',i);
+            shifting_to_location = particles{k}{1}/10;
+            rotation_matrix=RotationMatrix(quaternion(particles{k}{2}));
+            vol_t_mut=VolumeUtil.rotate_vol_pad0(vols_large{protein_number}, rotation_matrix, rotation_center,shifting_to_location,tomogram_size,'cubic');
+            vol_den=vol_den+vol_t_mut;
+        end
+    end
 end
 fprintf('\n'); toc
 

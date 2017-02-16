@@ -1,8 +1,13 @@
 % btom - takes output from cellPACK and turns it into a synthetic tomogram .mrc file
+% "loadjson" requires "JSONlab_ a toolbox to encode_decode JSON files"
+% Toolbox
+% "RotationMatrix" and "quaternion" require "quaternion" Toolbox
+% Also dependent on TOM_Release_2008 Toolbox
+% Also dependent on tomosimu software from Alber lab
 
 tic; clear
 
-name = 'RECIPE-Alber_model - Sheet1d-CRvariable_tr4.json'; % INPUT - cellPACK result _tr .json file
+name = 'RECIPE-Alber_model_ALL-1QO1-2REC_500_res_tr.json'; % INPUT - cellPACK result _tr .json file
 
 [~, work_dir, ~] = fileparts(pwd);
 if ~strcmp(work_dir,'tomosimu_sandbox')
@@ -19,7 +24,7 @@ compartments = fieldnames(recipe);
 %locations=cellPACK.data(:,1:3);
 
 %bounding_box=[ceil(max(locations(:,1)))+20 ceil(max(locations(:,2)))+20 ceil(max(locations(:,3)))+20];
-bounding_box=[200 200 200]; %CHANGE to input bounding box from file!!!!
+bounding_box=[500 500 200]; %CHANGE to input bounding box from file!!!!
 
 tomogram_size = bounding_box; % in pixels? nm? I think this is just the number of boxes in the tomogram.
 
@@ -56,7 +61,7 @@ ws.reconstruction_param.model.ctf.voltage=300;
 rotation_center = ws.map.map_resolution/2 * [1 1 1]; %MUST CHANGE - rotates around center of .situs map. cellPACK rotates around center of mass (sort of - actually average positions of atoms, not weighted). They must be made to agree. Calculate center of mass here?
 tic
 vol_den=zeros(tomogram_size);
-%disp('adding particle            ')
+disp('adding particle            ')
 for i=1:size(recipe.cytoplasme.ingredients)
     ingredients=fieldnames(recipe.cytoplasme.ingredients);
     for j=1:numel(ingredients)
@@ -64,7 +69,7 @@ for i=1:size(recipe.cytoplasme.ingredients)
         particles = recipe.cytoplasme.ingredients.(ingredients{j}).results;
         for k=1:numel(particles)
             protein_number=find(strcmp(pdb,protein_names));
-            %fprintf(1,'\b\b\b\b\b\b\b\b\b\b%10.0f',i);
+            fprintf(1,'\b\b\b\b\b\b\b\b\b\b%10.0f',i*j*k);
             shifting_to_location = particles{k}{1}/10;
             rotation_matrix=RotationMatrix(quaternion(particles{k}{2}));
             vol_t_mut=VolumeUtil.rotate_vol_pad0(vols_large{protein_number}, rotation_matrix, rotation_center,shifting_to_location,tomogram_size,'cubic');

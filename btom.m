@@ -28,13 +28,13 @@ bounding_box=[500 500 200]; %CHANGE to input bounding box from file!!!!
 
 tomogram_size = bounding_box; % in pixels? nm? I think this is just the number of boxes in the tomogram.
 
-ingredients=fieldnames(recipe.cytoplasme.ingredients);
-pdbs=cell(numel(ingredients),1);
-
-for i=1:size(ingredients)
-    pdbs{i}=recipe.cytoplasme.ingredients.(ingredients{i}).source.pdb;
+for i=1:numel(compartments)-1
+    ingredients=fieldnames(recipe.(compartments{i+1}).ingredients);
+%    pdbs=cell(numel(ingredients),1);
+    for j=1:size(ingredients)
+        pdbs{i,j}=recipe.cytoplasme.ingredients.(ingredients{j}).source.pdb;
+    end
 end
-
 protein_names=unique(pdbs);
 
 disp('Initialization Start');
@@ -62,11 +62,11 @@ rotation_center = ws.map.map_resolution/2 * [1 1 1]; %MUST CHANGE - rotates arou
 tic
 vol_den=zeros(tomogram_size);
 
-compartments = fieldnames(recipe);
+disp(strcat('recipe',recipe.recipe.name))
 
 for i=2:numel(compartments)
     disp(strcat('compartment=',compartments{i}))
-    ingredients=fieldnames(recipe.cytoplasme.ingredients);
+    ingredients=fieldnames(recipe.(compartments{i}).ingredients);
     for j=1:numel(ingredients)
         disp(strcat('ingredient=',ingredients{j}))
         pdb=recipe.cytoplasme.ingredients.(ingredients{j}).source.pdb;
@@ -87,7 +87,8 @@ fprintf('\n'); toc
 
 % apply back projection to realistically simulate tomogram
 vol_den_bp=GenerateSimulationMap.backprojection_reconstruction(ws.reconstruction_param, vol_den, ws.reconstruction_param.model.SNR);
-percent_filled = 100 - sum(vol_den(:)==0)/numel(vol_den)
+percent_volume_filled = 100 - sum(vol_den(:)==0)/numel(vol_den);
+disp(strcat('percent volume filled=',percent_volume_filled))
 
 cd ../tomograms
 tom_mrcwrite(vol_den_bp,'name',strcat(name,'.mrc'),'style','fei');

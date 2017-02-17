@@ -52,7 +52,7 @@ ws.map.volumes =  GenerateSimulationMap.load_maps(ws); %density maps for pdbs
 % definition of reconstruction model parameters
 % set values for SNR, missing wedge and ctf
 ws.reconstruction_param.model = struct();
-ws.reconstruction_param.model.SNR = 1; % was 0.05. 
+ws.reconstruction_param.model.SNR = 50; % was 0.05. 
 ws.reconstruction_param.model.missing_wedge_angle = 30;
 ws.reconstruction_param.model.ctf = GenerateSimulationMap.get_ctf_param(ws.map.map_resolution);
 ws.reconstruction_param.model.ctf.voltage=300;
@@ -62,23 +62,23 @@ rotation_center = ws.map.map_resolution/2 * [1 1 1]; %MUST CHANGE - rotates arou
 tic
 vol_den=zeros(tomogram_size);
 
-for i=1:size(recipe.cytoplasme.ingredients)
+compartments = fieldnames(recipe);
+
+for i=2:numel(compartments)
+    disp(strcat('compartment=',compartments{i}))
     ingredients=fieldnames(recipe.cytoplasme.ingredients);
     for j=1:numel(ingredients)
-        disp(ingredients{j})
+        disp(strcat('ingredient=',ingredients{j}))
         pdb=recipe.cytoplasme.ingredients.(ingredients{j}).source.pdb;
-        disp(pdb)
+        disp(strcat('pdb=',pdb))
         particles = recipe.cytoplasme.ingredients.(ingredients{j}).results;
         disp('adding particle            ')
         for k=1:numel(particles)
             protein_number=find(strcmp(pdb,protein_names));
             fprintf(1,'\b\b\b\b\b\b\b\b\b\b%10.0f',k);
-            shifting_to_location = particles{k}{1}/10
-            disp('making rotation matrix')
+            shifting_to_location = particles{k}{1}/10;
             rotation_matrix=RotationMatrix(quaternion(particles{k}{2}));
-            disp('rotating to make vol_t_mut') %this is the time-taker!
-            vol_t_mut=VolumeUtil.rotate_vol_pad0(vols_large{protein_number}, rotation_matrix, rotation_center,shifting_to_location,tomogram_size,'cubic');
-            disp('adding vol_den and vol_t_mut')
+            vol_t_mut=VolumeUtil.rotate_vol_pad0(vols_large{protein_number}, rotation_matrix, rotation_center,shifting_to_location,tomogram_size,'cubic');  %this is the time-taker!
             vol_den=vol_den+vol_t_mut;
         end
     end
@@ -87,6 +87,7 @@ fprintf('\n'); toc
 
 % apply back projection to realistically simulate tomogram
 vol_den_bp=GenerateSimulationMap.backprojection_reconstruction(ws.reconstruction_param, vol_den, ws.reconstruction_param.model.SNR);
+percent_filled = 100 - sum(vol_den(:)==0)/numel(vol_den)
 
 cd ../tomograms
 tom_mrcwrite(vol_den_bp,'name',strcat(name,'.mrc'),'style','fei');

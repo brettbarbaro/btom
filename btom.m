@@ -61,18 +61,24 @@ ws.reconstruction_param.model.ctf.voltage=300;
 rotation_center = ws.map.map_resolution/2 * [1 1 1]; %MUST CHANGE - rotates around center of .situs map. cellPACK rotates around center of mass (sort of - actually average positions of atoms, not weighted). They must be made to agree. Calculate center of mass here?
 tic
 vol_den=zeros(tomogram_size);
-disp('adding particle            ')
+
 for i=1:size(recipe.cytoplasme.ingredients)
     ingredients=fieldnames(recipe.cytoplasme.ingredients);
     for j=1:numel(ingredients)
+        disp(ingredients{j})
         pdb=recipe.cytoplasme.ingredients.(ingredients{j}).source.pdb;
+        disp(pdb)
         particles = recipe.cytoplasme.ingredients.(ingredients{j}).results;
+        disp('adding particle            ')
         for k=1:numel(particles)
             protein_number=find(strcmp(pdb,protein_names));
-            fprintf(1,'\b\b\b\b\b\b\b\b\b\b%10.0f',i*j*k);
-            shifting_to_location = particles{k}{1}/10;
+            fprintf(1,'\b\b\b\b\b\b\b\b\b\b%10.0f',k);
+            shifting_to_location = particles{k}{1}/10
+            disp('making rotation matrix')
             rotation_matrix=RotationMatrix(quaternion(particles{k}{2}));
+            disp('rotating to make vol_t_mut') %this is the time-taker!
             vol_t_mut=VolumeUtil.rotate_vol_pad0(vols_large{protein_number}, rotation_matrix, rotation_center,shifting_to_location,tomogram_size,'cubic');
+            disp('adding vol_den and vol_t_mut')
             vol_den=vol_den+vol_t_mut;
         end
     end

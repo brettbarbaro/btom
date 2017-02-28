@@ -28,11 +28,11 @@ bounding_box=[500 500 200]; %CHANGE to input bounding box from file!!!!
 
 tomogram_size = bounding_box; % in pixels? nm? I think this is just the number of boxes in the tomogram.
 
-for i=1:numel(compartments)-1
-    ingredients=fieldnames(recipe.(compartments{i+1}).ingredients);
+for i=2:numel(compartments)
+    ingredients=fieldnames(recipe.(compartments{i}).ingredients);
 %    pdbs=cell(numel(ingredients),1);
     for j=1:size(ingredients)
-        pdbs{i,j}=recipe.cytoplasme.ingredients.(ingredients{j}).source.pdb;
+        pdbs{i-1,j}=recipe.cytoplasme.ingredients.(ingredients{j}).source.pdb;
     end
 end
 protein_names=unique(pdbs);
@@ -81,14 +81,15 @@ for i=2:numel(compartments)
             vol_t_mut=VolumeUtil.rotate_vol_pad0(vols_large{protein_number}, rotation_matrix, rotation_center,shifting_to_location,tomogram_size,'cubic');  %this is the time-taker!
             vol_den=vol_den+vol_t_mut;
         end
+        disp('\n')
     end
 end
 fprintf('\n'); toc
 
 % apply back projection to realistically simulate tomogram
-vol_den_bp=GenerateSimulationMap.backprojection_reconstruction(ws.reconstruction_param, vol_den, ws.reconstruction_param.model.SNR);
-percent_volume_filled = 100 - sum(vol_den(:)==0)/numel(vol_den);
-disp(strcat('percent volume filled=',percent_volume_filled))
+vol_den_bp=GenerateSimulfationMap.backprojection_reconstruction(ws.reconstruction_param, vol_den, ws.reconstruction_param.model.SNR);
+percent_volume_filled = 100 - 100*sum(vol_den(:)==0)/numel(vol_den);
+fprintf(1,'percent volume filled=%f\n',percent_volume_filled)
 
 cd ../tomograms
 tom_mrcwrite(vol_den_bp,'name',strcat(name,'.mrc'),'style','fei');

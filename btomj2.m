@@ -1,18 +1,25 @@
 % btom - takes output from cellPACK and turns it into a synthetic tomogram .mrc file
-% "loadjson" requires "JSONlab_ a toolbox to encode_decode JSON files" Toolbox
+% 
+% "loadjson" requires "JSONlab_ a toolbox to encode_decode JSON files"
+% Toolbox - https://www.mathworks.com/matlabcentral/fileexchange/33381-jsonlab--a-toolbox-to-encode-decode-json-files
+% 
 % "RotationMatrix" and "quaternion" require "quaternion" Toolbox by Mark
-% Tincknell - https://sourceforge.net/projects/qtfm/  qtfm_2_5.zip
-% Also dependent on TOM_Release_2008 Toolbox
-% Also dependent on tomosimu software from Alber lab
+% Tincknell - download qtfm_2_5.zip from https://sourceforge.net/projects/qtfm/
+%
+% Dependent on TOM_Release_2008 Toolbox
+% Dependent on tomosimu software from Alber lab
+%
+% Start with "tomosimu" or a subfolder as the Current Folder
 
 tic; clear
 
-model_dir = '/Users/mac/Documents/Alber_model_3/';
-model_name = 'RECIPE-Alber_model_ALL_res_tr.json'; % INPUT - cellPACK result _tr .json file
+model_dir = '/Users/mac/Documents/Olson/Models/jitin_project/jitin6/';  % include final /
+model_name = 'RECIPE_jitin6_res_tr.json'; % INPUT - cellPACK result_tr.json file
+bounding_box=[100 100 100]; %IN NM. CHANGE to input bounding box from file!!!!
+
 model_path = [model_dir model_name];
 out_name = [model_name ''];
 %bounding_box=[ceil(max(locations(:,1)))+20 ceil(max(locations(:,2)))+20 ceil(max(locations(:,3)))+20];
-bounding_box=[100 100 100]; %CHANGE to input bounding box from file!!!!
 
 % make sure we're in the right directory
 [~, curr_dir, ~] = fileparts(pwd);
@@ -22,15 +29,15 @@ end
 cd code; 
 
 recipe = loadjson(model_path);
-compartments = fieldnames(recipe);
+compartments = fieldnames(recipe.compartments);
 
 tomogram_size = bounding_box; % in pixels? nm? I think this is just the number of boxes in the tomogram.
 
-for i=2:numel(compartments)
-    ingredients=fieldnames(recipe.(compartments{i}).ingredients);
+for i=1:numel(compartments)
+    ingredients=fieldnames(recipe.compartments.(compartments{i}).interior.ingredients);
 %    pdbs=cell(numel(ingredients),1);
     for j=1:size(ingredients)
-        pdbs{i-1,j}=recipe.cytoplasme.ingredients.(ingredients{j}).source.pdb;
+        pdbs{i,j}=recipe.compartments.(compartments{i}).interior.ingredients.(ingredients{j}).source.pdb;
     end
 end
 pdbs=unique(pdbs); % this will remove duplicates and rearrange the pdbs into alphabetical order
@@ -78,27 +85,29 @@ vol_den=zeros(tomogram_size);
 
 disp(strcat('recipe',recipe.recipe.name))
 
-for i=2:numel(compartments)
+for i=1:numel(compartments)
     disp(strcat('compartment=',compartments{i}))
-    ingredients=fieldnames(recipe.(compartments{i}).ingredients);
+    ingredients=fieldnames(recipe.compartments.(compartments{i}).interior.ingredients);
     for j=1:numel(ingredients)
         disp(strcat('ingredient=',ingredients{j}))
-        pdb=recipe.(compartments{i}).ingredients.(ingredients{j}).source.pdb;
+        pdb=recipe.compartments.(compartments{i}).interior.ingredients.(ingredients{j}).source.pdb;
         disp(strcat('pdb=',pdb))
-        particles = recipe.(compartments{i}).ingredients.(ingredients{j}).results;
+        particles = recipe.compartments.(compartments{i}).interior.ingredients.(ingredients{j}).results;
         disp('adding particle            ')
         protein_number=find(strcmp(pdb,pdbs));
         for k=1:numel(particles)
             fprintf(1,'\b\b\b\b\b\b\b\b\b\b%10.0f',k);
             shifting_to_location = particles{k}{1}/10;
             rotation_matrix=RotationMatrix(quaternion(particles{k}{2}));
-            vol_t_mut=VolumeUtil.rotate_vol_pad0(vols_large{protein_number}, rotation_matrix, rotation_center,shifting_to_location,tomogram_size,'cubic');  %this is the time-taker!
+            vol_t_mut=VolumeUtil.rotate_vol_pad0(vols_large{protein_number}, rotation_matrix, rotation_center, shifting_to_location, tomogram_size, 'cubic');  %this is the time-taker!
             vol_den = vol_den + vol_t_mut;
         end
         fprintf('\n')
     end
 end
 fprintf('\n'); toc
+
+vol_den(1:20,1:30,1:40) = ones(20,30,40);
 
 % apply back projection to realistically simulate tomogram
 vol_den_bp=GenerateSimulationMap.backprojection_reconstruction(ws.reconstruction_param, vol_den, ws.reconstruction_param.model.SNR);

@@ -3,7 +3,7 @@
 % "loadjson" requires "JSONlab_ a toolbox to encode_decode JSON files"
 % Toolbox - https://www.mathworks.com/matlabcentral/fileexchange/33381-jsonlab--a-toolbox-to-encode-decode-json-files
 % 
-% "RotationMatrix" and "quaternion" require "quaternion" Toolbox by Mark
+% "RotationMatrix" ansad "quaternion" require "quaternion" Toolbox by Mark
 % Tincknell - download qtfm_2_5.zip from https://sourceforge.net/projects/qtfm/
 %
 % Dependent on TOM_Release_2008 Toolbox

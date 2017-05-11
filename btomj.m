@@ -23,7 +23,7 @@ out_name = [model_name ''];
 
 % make sure we're in the right directory
 [~, curr_dir, ~] = fileparts(pwd);
-if ~strcmp(curr_dir,'tomosimu_sandbox')
+if ~strcmp(curr_dir,'btom')
     cd ..
 end
 cd code; 

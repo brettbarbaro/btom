@@ -14,8 +14,8 @@
 tic; clear
 
 model_dir = '/Users/mac/Documents/Olson/Models/jitin_project/jitin6/';  % include final /
-model_name = 'jitin6_res_tr.json'; % INPUT - cellPACK result_tr.json file
-bounding_box=[100 100 100]; %IN NM. CHANGE to input bounding box from file!!!!
+model_name = 'jitin6_1000_res_tr.json'; % INPUT - cellPACK result_tr.json file
+bounding_box=[300 300 300]; %IN NM. CHANGE to input bounding box from file!!!!
 
 model_path = [model_dir model_name];
 out_name = [model_name ''];
@@ -46,13 +46,27 @@ pdbs=unique(pdbs); % this will remove duplicates and rearrange the pdbs into alp
 cd ..
 
 
-%make situs files
+% make situs files
+% settings
+water = '2';  % Do you want to exclude the water atoms? (1: No, 2: Yes)
+bfactor = '1';  % Do you want to select atoms based on a B-factor threshold? (1: No, 2: Yes)
+voxel_spacing = '10';  % Please enter the desired voxel spacing for the output map (in Angstrom)
+kernel_width = '-40';  % Kernel width. Please enter (in Angstrom): (as pos. value) kernel half-max radius or (as neg. value) target resolution (2 sigma)
+kernel_type = '1';  % Please select the type of smoothing kernel: 1: Gaussian, 2: Triangular, 3: Semi-Epanechnikov, 4: Epanechnikov, 5: Hard Sphere
+correct_lattice = '1';  % Do you want to correct for lattice interpolation smoothing effects? (1: Yes (slightly lowers the kernel width to maintain target resolution), 2: No)
+scaling_factor = '1';  % Finally, please enter the desired kernel amplitude (scaling factor)
+
+% creating a text file for the next part. this is kinda clunky, but it's
+% the only way I know how to do it right now.
+fid = fopen('situs_settings.txt','wt');
+fprintf(fid, [water '\n' bfactor '\n' voxel_spacing '\n' kernel_width '\n' kernel_type '\n' correct_lattice '\n' scaling_factor '\n']);
+fclose(fid);
+
 pdb2vol_loc = './Situs_2.8/src/pdb2vol';
 for i=1:numel(pdbs)
     pdbfile = [model_dir,'PDB/',pdbs{i},'/',pdbs{i},'.pdb'];
     situsfile = [model_dir, 'PDB/',pdbs{i},'/40','.situs'];
-    settingsfile = './Situs_2.8/settings.txt';
-    system_string = [pdb2vol_loc ' ' pdbfile ' ' situsfile ' < ' settingsfile];
+    system_string = [pdb2vol_loc ' ' pdbfile ' ' situsfile ' < ' './situs_settings.txt'];
     system(system_string)
 end
 
@@ -66,30 +80,20 @@ ws.map.protein_names = pdbs;
 ws.sys.data_dir = strcat(model_dir,'PDB');
 ws.map.volumes = GenerateSimulationMap.load_maps(ws); %density maps for pdbs
 
-% resize so all same - why?
+
+% make density maps cubes so the densities can rotate freely within them.
 vols_large = ws.map.volumes;
-max_size=0;
-%vol_siz = zeros(numel(vols_large));
+max_size = 0;
 for i=1:numel(ws.map.volumes)
     [vols_large(i), vol_siz] = VolumeUtil.resize_vols(ws.map.volumes(i), 1.0);
-    if max(vol_siz) > max_size
+    if max(vol_siz) > max_size  % determine largest density map to make buffer zone on tomogram
         max_size = max(vol_siz);
     end
 end
-%max_vol = max(vols_large);
 
-temp_size = bounding_box + 2*max_size; % expanding tomogram size to make room for particles
-
-% definition of reconstruction model parameters
-% set values for SNR, missing wedge and ctf
-ws.reconstruction_param.model = struct();
-ws.reconstruction_param.model.SNR = 50; % was 0.05. 
-ws.reconstruction_param.model.missing_wedge_angle = 30;
-ws.reconstruction_param.model.ctf = GenerateSimulationMap.get_ctf_param(ws.map.map_resolution);
-ws.reconstruction_param.model.ctf.voltage=300;
+temp_size = bounding_box + 2*max_size; % expanding tomogram size to make room for particles at edges
 
 % add each particle to its corresponding location to generate simulated tomogram
-% rotation_center = ws.map.map_resolution/2 * [1 1 1]; %MUST CHANGE - rotates around center of .situs map. cellPACK rotates around center of mass (sort of - actually average positions of atoms, not weighted). They must be made to agree. Calculate center of mass here?
 tic
 vol_den=zeros(temp_size);
 
@@ -106,7 +110,7 @@ for i=1:numel(compartments)
         disp('adding particle            ')
         protein_number=find(strcmp(pdb,pdbs));
         vol_siz = size(vols_large{protein_number});
-        rotation_center = vol_siz/2;
+        rotation_center = vol_siz/2;  % THIS SHOULD BE MADE TO MATCH cellPACK (i.e. centroid)
         for k=1:numel(particles)
             fprintf(1,'\b\b\b\b\b\b\b\b\b\b%10.0f',k);
             shifting_to_location = particles{k}{1}/10 + max_size;
@@ -123,6 +127,14 @@ fprintf('\n'); toc
 
 % returning tomogram to original size
 vol_den = vol_den(max_size:max_size+tomogram_size(1)-1, max_size:max_size+tomogram_size(2)-1, max_size:max_size+tomogram_size(3)-1);
+
+% definition of reconstruction model parameters
+% set values for SNR, missing wedge and ctf
+ws.reconstruction_param.model = struct();
+ws.reconstruction_param.model.SNR = 50; % was 0.05. 
+ws.reconstruction_param.model.missing_wedge_angle = 30;
+ws.reconstruction_param.model.ctf = GenerateSimulationMap.get_ctf_param(ws.map.map_resolution);
+ws.reconstruction_param.model.ctf.voltage=300;
 
 % apply back projection to realistically simulate tomogram
 vol_den_bp=GenerateSimulationMap.backprojection_reconstruction(ws.reconstruction_param, vol_den, ws.reconstruction_param.model.SNR);

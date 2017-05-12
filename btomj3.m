@@ -14,7 +14,7 @@
 tic; clear
 
 model_dir = '/Users/mac/Documents/Olson/Models/jitin_project/jitin6/';  % include final /
-model_name = 'RECIPE_jitin6_res_tr.json'; % INPUT - cellPACK result_tr.json file
+model_name = 'jitin6_res_tr.json'; % INPUT - cellPACK result_tr.json file
 bounding_box=[100 100 100]; %IN NM. CHANGE to input bounding box from file!!!!
 
 model_path = [model_dir model_name];
@@ -67,8 +67,18 @@ ws.sys.data_dir = strcat(model_dir,'PDB');
 ws.map.volumes = GenerateSimulationMap.load_maps(ws); %density maps for pdbs
 
 % resize so all same - why?
-[vols_large, max_siz] = VolumeUtil.resize_vols(ws.map.volumes, 1.0);
-%vols_large = ws.map.volumes;
+vols_large = ws.map.volumes;
+max_size=0;
+%vol_siz = zeros(numel(vols_large));
+for i=1:numel(ws.map.volumes)
+    [vols_large(i), vol_siz] = VolumeUtil.resize_vols(ws.map.volumes(i), 1.0);
+    if max(vol_siz) > max_size
+        max_size = max(vol_siz);
+    end
+end
+%max_vol = max(vols_large);
+
+temp_size = bounding_box + 2*max_size; % expanding tomogram size to make room for particles
 
 % definition of reconstruction model parameters
 % set values for SNR, missing wedge and ctf
@@ -79,9 +89,9 @@ ws.reconstruction_param.model.ctf = GenerateSimulationMap.get_ctf_param(ws.map.m
 ws.reconstruction_param.model.ctf.voltage=300;
 
 % add each particle to its corresponding location to generate simulated tomogram
-rotation_center = ws.map.map_resolution/2 * [1 1 1]; %MUST CHANGE - rotates around center of .situs map. cellPACK rotates around center of mass (sort of - actually average positions of atoms, not weighted). They must be made to agree. Calculate center of mass here?
+% rotation_center = ws.map.map_resolution/2 * [1 1 1]; %MUST CHANGE - rotates around center of .situs map. cellPACK rotates around center of mass (sort of - actually average positions of atoms, not weighted). They must be made to agree. Calculate center of mass here?
 tic
-vol_den=zeros(tomogram_size);
+vol_den=zeros(temp_size);
 
 disp(strcat('recipe',recipe.recipe.name))
 
@@ -95,21 +105,24 @@ for i=1:numel(compartments)
         particles = recipe.compartments.(compartments{i}).interior.ingredients.(ingredients{j}).results;
         disp('adding particle            ')
         protein_number=find(strcmp(pdb,pdbs));
+        vol_siz = size(vols_large{protein_number});
+        rotation_center = vol_siz/2;
         for k=1:numel(particles)
             fprintf(1,'\b\b\b\b\b\b\b\b\b\b%10.0f',k);
-            shifting_to_location = particles{k}{1}/10;
-            loc = fix(shifting_to_location);
+            shifting_to_location = particles{k}{1}/10 + max_size;
+            loc = fix(shifting_to_location) - vol_siz/2;
             offset = shifting_to_location - loc;
             rotation_matrix=RotationMatrix(quaternion(particles{k}{2}));
-            vol_t_mut=VolumeUtil.rotate_vol_pad0(vols_large{protein_number}, rotation_matrix, rotation_center, offset, max_siz, 'cubic');  %this is the time-taker!
-            vol_den(loc(1):loc(1)+max_siz(1)-1,loc(2):loc(2)+max_siz(2)-1,loc(3):loc(3)+max_siz(3)-1) = vol_t_mut;
+            vol_t_mut=VolumeUtil.rotate_vol_pad0(vols_large{protein_number}, rotation_matrix, rotation_center, offset, vol_siz, 'cubic');  %this is the time-taker!
+            vol_den(loc(1):loc(1)+vol_siz(1)-1,loc(2):loc(2)+vol_siz(2)-1,loc(3):loc(3)+vol_siz(3)-1) = vol_den(loc(1):loc(1)+vol_siz(1)-1,loc(2):loc(2)+vol_siz(2)-1,loc(3):loc(3)+vol_siz(3)-1) + vol_t_mut;
         end
         fprintf('\n')
     end
 end
 fprintf('\n'); toc
 
-% vol_den(1:20,1:30,1:40) = ones(20,30,40);
+% returning tomogram to original size
+vol_den = vol_den(max_size:max_size+tomogram_size(1)-1, max_size:max_size+tomogram_size(2)-1, max_size:max_size+tomogram_size(3)-1);
 
 % apply back projection to realistically simulate tomogram
 vol_den_bp=GenerateSimulationMap.backprojection_reconstruction(ws.reconstruction_param, vol_den, ws.reconstruction_param.model.SNR);
